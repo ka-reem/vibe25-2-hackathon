@@ -1,2 +1,8 @@
 requests
 python-dotenv
+openai
+streamlit
+streamlit-extras
+plotly
+pandas
+openai
