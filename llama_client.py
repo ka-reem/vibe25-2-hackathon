@@ -88,6 +88,66 @@ class LlamaProcessor:
         except Exception as e:
             return f"Error processing with Llama API: {str(e)}"
     
+    def generate_outreach_email(self, job_description, company_name="", role_title="", filename="person_data.json"):
+        """
+        Generate a personalized outreach email for a candidate
+        """
+        person_data = self.load_person_data(filename)
+        if not person_data:
+            return "Unable to load person data."
+        
+        # Handle list format from CrustData API
+        if isinstance(person_data, list) and len(person_data) > 0:
+            person = person_data[0]  # Get the first person
+        else:
+            person = person_data
+        
+        prompt = f"""
+        OUTREACH EMAIL GENERATION REQUEST
+        
+        COMPLETE CANDIDATE DATA:
+        {json.dumps(person, indent=2)}
+        
+        JOB/OPPORTUNITY DETAILS:
+        Role Title: {role_title}
+        Company: {company_name}
+        Job Description: {job_description}
+        
+        TASK:
+        Write a personalized, professional outreach email to this candidate. The email should:
+        
+        1. **Subject Line**: Create an engaging subject line
+        2. **Personalized Opening**: Reference specific details from their background
+        3. **Value Proposition**: Explain why this opportunity would be interesting to them
+        4. **Specific Fit**: Mention 2-3 specific aspects of their experience that make them a great fit
+        5. **Soft Approach**: Don't be too aggressive or salesy
+        6. **Clear CTA**: Include a clear but low-pressure call to action
+        7. **Professional Tone**: Warm but professional
+        
+        Use ALL available information from their profile to make it as personalized as possible.
+        Include details like their current role, company, education, previous experience, etc.
+        
+        Format the response as:
+        **Subject:** [subject line]
+        
+        **Email Body:**
+        [email content]
+        """
+        
+        try:
+            completion = self.client.chat.completions.create(
+                model="Llama-4-Maverick-17B-128E-Instruct-FP8",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
+            )
+            return completion.choices[0].message.content
+        except Exception as e:
+            return f"Error generating email: {str(e)}"
+
     def simple_chat(self, filename="person_data.json"):
         """
         Simple chat interface to ask questions about the person data
@@ -144,55 +204,37 @@ class LlamaProcessor:
 
     def _create_job_fit_prompt(self, person_data, job_description):
         """
-        Create a prompt to analyze job fit
+        Create a prompt to analyze job fit using ALL available data
         """
-        name = person_data.get('name', 'Unknown')
-        current_title = person_data.get('current_position_title', 'Unknown')
-        current_company = person_data.get('current_company_name', 'Unknown')
-        
-        # Extract work experience
-        work_experience = []
-        if 'work_experience' in person_data:
-            for exp in person_data['work_experience'][:5]:  # Last 5 positions
-                work_experience.append(f"• {exp.get('employee_title', 'Unknown')} at {exp.get('employer_name', 'Unknown')}")
-        
-        # Extract education
-        education = []
-        if 'education_background' in person_data:
-            for edu in person_data['education_background']:
-                degree = edu.get('degree_name', 'Unknown')
-                school = edu.get('institute_name', 'Unknown')
-                field = edu.get('field_of_study', '')
-                education.append(f"• {degree} in {field} from {school}")
-        
         prompt = f"""
         JOB FIT ANALYSIS REQUEST
         
-        CANDIDATE PROFILE:
-        Name: {name}
-        Current Position: {current_title} at {current_company}
-        
-        Recent Work Experience:
-        {chr(10).join(work_experience) if work_experience else '• No work experience data available'}
-        
-        Education:
-        {chr(10).join(education) if education else '• No education data available'}
+        COMPLETE CANDIDATE DATA (All Available Information):
+        {json.dumps(person_data, indent=2)}
         
         JOB DESCRIPTION:
         {job_description}
         
         ANALYSIS REQUEST:
-        Please analyze if this candidate is a good fit for the job described above. Provide:
+        Please analyze if this candidate is a good fit for the job described above using ALL the data provided. Provide:
         
         1. **FIT SCORE** (1-10): Rate how well this candidate matches the job requirements
         
-        2. **STRENGTHS**: What makes this candidate a good fit? List specific experiences, skills, or qualifications that align with the job.
+        2. **STRENGTHS**: What makes this candidate a good fit? List specific experiences, skills, or qualifications that align with the job. Reference specific details from their complete profile.
         
         3. **GAPS**: What are the potential gaps or concerns? What might the candidate lack for this role?
         
         4. **RECOMMENDATION**: Should we proceed with this candidate? Why or why not?
         
         5. **NEXT STEPS**: If moving forward, what questions should we ask in an interview to validate fit?
+        
+        6. **OUTREACH EMAIL**: If this is a good fit (score 7+ out of 10), write a personalized professional email that we could send to reach out to this candidate. The email should:
+           - Be warm and professional
+           - Reference specific aspects of their background that make them a great fit
+           - Mention the opportunity without being too salesy
+           - Include a clear call to action
+           - Be personalized using details from their profile
+           - Keep it concise but compelling
         
         Format your response clearly with the numbered sections above.
         """
@@ -201,30 +243,26 @@ class LlamaProcessor:
     
     def _create_general_prompt(self, person_data):
         """
-        Create a general analysis prompt
+        Create a general analysis prompt using ALL available data
         """
-        name = person_data.get('name', 'Unknown')
-        current_title = person_data.get('current_position_title', 'Unknown')
-        current_company = person_data.get('current_company_name', 'Unknown')
-        
         prompt = f"""
         PROFESSIONAL PROFILE ANALYSIS
         
-        Candidate: {name}
-        Current Role: {current_title} at {current_company}
-        
-        Full Profile Data:
+        COMPLETE CANDIDATE DATA (All Available Information):
         {json.dumps(person_data, indent=2)}
         
-        Please provide a comprehensive professional analysis including:
+        Please provide a comprehensive professional analysis using ALL the data provided above including:
         
-        1. **Professional Summary**: Brief overview of their career
-        2. **Key Strengths**: Core skills and expertise areas
-        3. **Career Progression**: How their career has evolved
+        1. **Professional Summary**: Brief overview of their career using all available details
+        2. **Key Strengths**: Core skills and expertise areas found in the data
+        3. **Career Progression**: How their career has evolved based on complete work history
         4. **Industry Focus**: What industries/domains they specialize in
-        5. **Unique Value**: What makes them stand out
-        6. **Potential Opportunities**: Types of roles they'd be good for
+        5. **Unique Value**: What makes them stand out based on their full profile
+        6. **Network & Connections**: Any notable connections, companies, or experiences
+        7. **Potential Opportunities**: Types of roles they'd be excellent for
+        8. **Contact Strategy**: Best approach to reach out to this person based on their profile
         
+        Use ALL available information in the JSON data to provide the most comprehensive analysis possible.
         Format your response in a clear, structured way.
         """
         
@@ -247,8 +285,9 @@ def main():
     print("1. Job Fit Analysis (compare candidate to job description)")
     print("2. General Professional Analysis")
     print("3. Simple Chat (ask questions about the person data)")
+    print("4. Generate Outreach Email")
     
-    choice = input("\nEnter your choice (1, 2, or 3): ").strip()
+    choice = input("\nEnter your choice (1, 2, 3, or 4): ").strip()
     
     if choice == "1":
         print("\n📝 Please enter the job description:")
@@ -275,8 +314,27 @@ def main():
     elif choice == "3":
         processor.simple_chat()
     
+    elif choice == "4":
+        print("\n📧 Generating outreach email...")
+        print("\nEnter the job description:")
+        job_description = input()
+        print("\nEnter the company name (optional):")
+        company_name = input()
+        print("\nEnter the role title (optional):")
+        role_title = input()
+        
+        if job_description.strip():
+            print("\n🤖 Generating personalized email...")
+            result = processor.generate_outreach_email(job_description, company_name, role_title)
+            print("\n" + "="*50)
+            print("OUTREACH EMAIL")
+            print("="*50)
+            print(result)
+        else:
+            print("❌ Job description cannot be empty.")
+    
     else:
-        print("❌ Invalid choice. Please select 1, 2, or 3.")
+        print("❌ Invalid choice. Please select 1, 2, 3, or 4.")
 
 if __name__ == "__main__":
     main()

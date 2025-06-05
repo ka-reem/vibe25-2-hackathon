@@ -106,7 +106,7 @@ def main():
         
         page = st.selectbox(
             "🎯 Choose Your Mission",
-            ["🏠 Bounty Dashboard", "🔍 Scout Talent", "💼 Job Fit Analysis", "💬 Intel Chat", "🏆 Leaderboard"]
+            ["🏠 Bounty Dashboard", "🔍 Scout Talent", "💼 Job Fit Analysis", "📧 Email Generator", "💬 Intel Chat", "🏆 Leaderboard"]
         )
         
         st.markdown("---")
@@ -124,6 +124,8 @@ def main():
         show_talent_scout()
     elif page == "💼 Job Fit Analysis":
         show_job_fit()
+    elif page == "📧 Email Generator":
+        show_email_generator()
     elif page == "💬 Intel Chat":
         show_intel_chat()
     elif page == "🏆 Leaderboard":
@@ -261,6 +263,135 @@ def show_talent_scout():
                         school = edu.get('institute_name', 'Unknown')
                         st.write(f"• {degree} from {school}")
 
+def show_email_generator():
+    """Email generator page"""
+    st.markdown("## 📧 Email Generator")
+    st.markdown("Generate personalized outreach emails for your bounty hunting!")
+    
+    # Check if person data exists
+    if not os.path.exists("person_data.json"):
+        st.warning("🔍 No scouted talent found! Go to the Scout Talent page first.")
+        return
+    
+    # Load person data for display
+    with open("person_data.json", 'r') as f:
+        person_data = json.load(f)
+    
+    person = person_data[0] if isinstance(person_data, list) else person_data
+    
+    # Display current target
+    st.markdown("### 🎯 Current Target")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.info(f"**{person.get('name', 'Unknown')}**")
+        st.write(f"📧 {person.get('email', 'Not available')}")
+    with col2:
+        st.write(f"💼 {person.get('current_position_title', 'Unknown')}")
+        st.write(f"🏢 {person.get('current_company_name', 'Unknown')}")
+    
+    st.markdown("---")
+    
+    # Form for email generation
+    with st.form("email_generator_form"):
+        st.markdown("### 📝 Email Details")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            company_name = st.text_input("🏢 Your Company Name", placeholder="Acme Corp")
+            role_title = st.text_input("💼 Role Title", placeholder="Senior Software Engineer")
+        
+        with col2:
+            sender_name = st.text_input("👤 Your Name", placeholder="John Doe")
+            sender_title = st.text_input("📋 Your Title", placeholder="Talent Acquisition Manager")
+        
+        job_description = st.text_area(
+            "📋 Job Description / Opportunity Details",
+            placeholder="Describe the role, requirements, and what makes it exciting...",
+            height=150
+        )
+        
+        email_tone = st.selectbox(
+            "🎨 Email Tone",
+            ["Professional", "Casual & Friendly", "Direct & Concise", "Enthusiastic"]
+        )
+        
+        submitted = st.form_submit_button("🚀 Generate Email", type="primary")
+        
+        if submitted:
+            if job_description.strip():
+                with st.spinner("🤖 AI is crafting the perfect email..."):
+                    try:
+                        processor = LlamaProcessor()
+                        
+                        # Enhanced prompt with all the details
+                        enhanced_prompt = f"""
+                        PERSONALIZED OUTREACH EMAIL GENERATION
+                        
+                        COMPLETE TARGET CANDIDATE DATA:
+                        {json.dumps(person, indent=2)}
+                        
+                        EMAIL CONTEXT:
+                        - Company: {company_name}
+                        - Role: {role_title}
+                        - Sender: {sender_name}
+                        - Sender Title: {sender_title}
+                        - Tone: {email_tone}
+                        - Job Description: {job_description}
+                        
+                        TASK:
+                        Generate a highly personalized, professional outreach email that:
+                        1. Uses specific details from their complete profile
+                        2. References their current role, company, and background
+                        3. Highlights relevant experience that makes them a perfect fit
+                        4. Maintains a {email_tone.lower()} tone
+                        5. Includes a compelling subject line
+                        6. Has a clear but non-pushy call to action
+                        
+                        Format as:
+                        **Subject:** [subject line]
+                        
+                        **Email:**
+                        [complete email body]
+                        """
+                        
+                        completion = processor.client.chat.completions.create(
+                            model="Llama-4-Maverick-17B-128E-Instruct-FP8",
+                            messages=[{"role": "user", "content": enhanced_prompt}],
+                        )
+                        email_content = completion.choices[0].message.content
+                        
+                        st.markdown("---")
+                        st.markdown("## 📧 Your Personalized Email")
+                        
+                        # Parse subject and body
+                        if "**Subject:**" in email_content and "**Email:**" in email_content:
+                            parts = email_content.split("**Email:**")
+                            subject_part = parts[0].replace("**Subject:**", "").strip()
+                            email_body = parts[1].strip()
+                            
+                            st.markdown("### 📨 Subject Line")
+                            st.code(subject_part, language=None)
+                            
+                            st.markdown("### 📝 Email Body")
+                            st.markdown(email_body)
+                        else:
+                            st.markdown(email_content)
+                        
+                        # Copy buttons
+                        st.markdown("---")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("📋 Copy Subject"):
+                                st.success("Subject copied! (In a real app, this would copy to clipboard)")
+                        with col2:
+                            if st.button("📋 Copy Email"):
+                                st.success("Email copied! (In a real app, this would copy to clipboard)")
+                        
+                    except Exception as e:
+                        st.error(f"Error generating email: {str(e)}")
+            else:
+                st.warning("Please enter a job description first!")
+
 def show_job_fit():
     """Job fit analysis page"""
     st.markdown("## 💼 Job Fit Analysis")
@@ -353,14 +484,15 @@ def show_intel_chat():
                 
                 # Create a simple prompt with the person data and user question
                 full_prompt = f"""
-                Based on the following person data, please answer the user's question:
+                Based on the following COMPLETE person data, please answer the user's question:
 
-                Person Data:
+                COMPLETE PERSON DATA (All Available Information):
                 {json.dumps(person, indent=2)}
 
                 User Question: {prompt}
 
-                Please provide a helpful and accurate answer based on the data above.
+                Please provide a helpful and accurate answer based on ALL the data above. 
+                Use any relevant details from their complete profile to give the most comprehensive response possible.
                 """
                 
                 try:
